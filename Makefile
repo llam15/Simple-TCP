@@ -1,7 +1,7 @@
 CXX=g++
 CXXOPTIMIZE= -O2
 CXXFLAGS= -g -Wall -pthread -std=c++11 $(CXXOPTIMIZE)
-USERID=EDIT_MAKE_FILE
+USERID=804302387
 
 # Add all .cpp files that need to be compiled for your server
 SERVER_FILES=server.cpp
@@ -21,7 +21,7 @@ client: $(CLIENT_FILES:.cpp=.o)
 	$(CXX) -o $@ $(CXXFLAGS) $(CLIENT_FILES:.cpp=.o)
 
 clean:
-	rm -rf *.o *~ *.gch *.swp *.dSYM server client *.tar.gz
+	rm -rf *.o *~ *.gch *.swp *.dSYM server client received.data *.tar.gz
 
 tarball: clean
 	tar -cvf $(USERID).tar.gz *
