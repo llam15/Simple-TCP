@@ -12,4 +12,8 @@ It provides a `clean` target, and `tarball` target to create the submission file
 
 ## Provided Files
 
-`server.cpp` and `client.cpp` are the entry points for the server and client part of the project.
+server.cpp : code for server that serves one file through a TCP connection
+
+client.cpp : code for client that downloads a file through a TCP connection
+
+tcp.h : Declaration of the class for the TCP header
