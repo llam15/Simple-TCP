@@ -54,6 +54,9 @@ void usage_msg()
 void timeout(const int sockfd, const struct sockaddr_storage &cli_addr, socklen_t &cli_addrlen) {
     // Set slow start threshold to half of CWND
     SSTHRESH = CWND/2;
+    if (SSTHRESH < 1024) {
+        SSTHRESH = 1024;
+    }
     
     // Reset CWND
     CWND = 1024;
