@@ -90,7 +90,10 @@ Kevin Huynh, 704-283-105}
     (for a total packet size of 1032 bytes). The server sends each packet at
     once and then waits for ACKs from the client. A timer is used to keep track
     of the latest received ACK. If the server does not receive an ACK for the
-    oldest packet within 500 milliseconds, then timeout occurs.
+    oldest packet within 500 milliseconds, then timeout occurs. If a correct
+    ACK is received, the server's congestion window is either doubled (if in
+    slow start state) or increased by MSS(MSS/CWND) (if in congestion avoidance
+    state).
 
     When the server times out, it sets the slow start threshold (SSTHRESH) to
     half of the current congestion window, or 1024 bytes if half the congestion
@@ -218,6 +221,7 @@ Kevin Huynh, 704-283-105}
     \begin{itemize}
         \item 5\% packet loss: $\sim$2 minutes
         \item 10\% packet loss: $\sim$6 minutes
+        \item 15\% packet loss: $\sim$10 minutes
         \item 15\% packet loss, 4ms delay: $\sim$13 minutes
     \end{itemize}
 

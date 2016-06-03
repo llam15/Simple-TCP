@@ -5,7 +5,6 @@
 #include <vector>
 
 #include <arpa/inet.h>
-#include <math.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <stdio.h>
@@ -348,7 +347,7 @@ int main(int argc, char *argv[])
                 }
                  // Congestion avoidance
                 else {
-                     CWND += ceil((double)MSS/CWND);
+                     CWND += MSS*((double)MSS/CWND);
                 }
 
                 // Read in and sent whole file. All packets have been ACKed.
