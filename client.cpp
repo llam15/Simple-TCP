@@ -36,8 +36,9 @@ int CURRENT_SEQ = -1;     // Last byte sent
 int NEXT_EXPECTED = -1;    // Last byte ACKed
 int FINSTART = -1;
 
-const int MAX_PKT_LEN = 1032; // Max packet = 1032. Max payload = 1024
+const int MAX_PKT_LEN = 1032; //Max packet = 1032. Max payload = 1024
 const int MAX_SEQ_NUM = 30720;
+const int MAX_WIN = 15360;
 
 void usage_msg()
 {
@@ -72,12 +73,12 @@ int main(int argc, char *argv[])
         return -1;
     }
     
-	if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &TIMEOUT, sizeof(timeval)) == -1) {
-		cerr << "ERROR: Could not set socket options" << endl;
-		return -1;
-	}
+    if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &TIMEOUT, sizeof(timeval)) == -1) {
+        cerr << "ERROR: Could not set socket options" << endl;
+        return -1;
+    }
     
-    TCPHeader synHeader(0, 0, MAX_SEQ_NUM, 2);
+    TCPHeader synHeader(0, 0, MAX_WIN, 2);
     TCPHeader fromHeader;
     CURRENT_SEQ = 0;
     vector<char> encoded_header = synHeader.encode();
@@ -91,7 +92,7 @@ int main(int argc, char *argv[])
         cerr << "ERROR: Failed to send packet" << endl;
         return -1;
     }
-    cout << "Sending SYN packet" << endl;
+    cout << "Sending packet " << CURRENT_SEQ << " SYN" << endl;
     CURRENT_SEQ = 1;
     
     remove(FILENAME);
@@ -115,7 +116,7 @@ int main(int argc, char *argv[])
         // Check if time out after 500 ms
         if (!connected && (((current.tv_sec - start.tv_sec) * 1000.0) + ((current.tv_usec - start.tv_usec) / 1000.0)) >= 500) {
             if (FINSTART == 1) {
-                TCPHeader toHeader(CURRENT_SEQ, NEXT_EXPECTED, MAX_SEQ_NUM, 5);
+                TCPHeader toHeader(CURRENT_SEQ, NEXT_EXPECTED, MAX_WIN, 5);
                 encoded_header.clear();
                 encoded_header = toHeader.encode();
                 
@@ -123,24 +124,24 @@ int main(int argc, char *argv[])
                     cerr <<"sendto failed" << endl;
                     return -1;
                 }
-                cout << "Sending ACK packet " << NEXT_EXPECTED << " Retransmission" << endl;
+                cout << "Sending packet " << NEXT_EXPECTED << " Retransmission" << endl;
             }
             else {
                 if (sendto(sockfd, &encoded_header[0], encoded_header.size(), 0, (struct sockaddr *)&servaddr, sizeof(servaddr)) < 0) {
                     cerr <<"sendto failed" << endl;
                     return -1;
                 }
-                cerr << "Sending SYN packet Retransmission" << endl;
+                cout << "Sending packet 0 Retransmission" << endl;
             }
-                gettimeofday(&start, NULL);
+            gettimeofday(&start, NULL);
         }
         
         //RECV TCP packet
         if ((bytes_read = recvfrom(sockfd, &payload[0], MAX_PKT_LEN, 0, (struct sockaddr *)&servaddr, &servsize)) < 0) {
-    		if ((errno == EAGAIN) || (errno == EWOULDBLOCK)) {
-        		// Timed out
-    			continue;
-        	}
+            if ((errno == EAGAIN) || (errno == EWOULDBLOCK)) {
+                // Timed out
+                continue;
+            }
         }
         else {
             if (bytes_read > 0) {
@@ -150,13 +151,13 @@ int main(int argc, char *argv[])
                 // Flag = 6 = AS (SYN ACK)
                 if (fromHeader.getFlags() == 6) {
                     connected = true;
-                    cout << "Receiving data packet " << fromHeader.getSEQ() << endl;
+                    cout << "Receiving packet " << fromHeader.getSEQ() << endl;
                     
-                    // Next expected SEQ number 
+                    // Next expected SEQ number
                     NEXT_EXPECTED = (fromHeader.getSEQ() + 1) % MAX_SEQ_NUM;
-
+                    
                     // Create TCP header
-                    TCPHeader toHeader(CURRENT_SEQ, NEXT_EXPECTED, MAX_SEQ_NUM, 4);
+                    TCPHeader toHeader(CURRENT_SEQ, NEXT_EXPECTED, MAX_WIN, 4);
                     encoded_header.clear();
                     payload.clear();
                     payload.resize(MAX_PKT_LEN);
@@ -168,30 +169,30 @@ int main(int argc, char *argv[])
                         return -1;
                     }
                     if (retransmit == false) {
-                        cout << "Sending ACK packet " << NEXT_EXPECTED << endl;
+                        cout << "Sending packet " << NEXT_EXPECTED << endl;
                     }
                     else {
-                        cout << "Sending ACK packet " << NEXT_EXPECTED << " Retransmission" << endl;    
+                        cout << "Sending packet " << NEXT_EXPECTED << " Retransmission" << endl;
                     }
                     
                 }
                 
                 // Flag = 1 = F (FIN)
                 else if (fromHeader.getFlags() == 1) {
-                    cout << "Receiving data packet " << fromHeader.getSEQ() << endl;
-
+                    cout << "Receiving packet " << fromHeader.getSEQ() << endl;
+                    
                     NEXT_EXPECTED = (fromHeader.getSEQ() + 1) % MAX_SEQ_NUM;
-
-                    TCPHeader toHeader(CURRENT_SEQ, NEXT_EXPECTED, MAX_SEQ_NUM, 5);
+                    
+                    TCPHeader toHeader(CURRENT_SEQ, NEXT_EXPECTED, MAX_WIN, 5);
                     encoded_header.clear();
                     encoded_header = toHeader.encode();
-                        
+                    
                     //send FIN-ACK
                     if (sendto(sockfd, &encoded_header[0], encoded_header.size(), 0, (struct sockaddr *)&servaddr, sizeof(servaddr)) < 0) {
                         cerr << "ERROR: Failed to send packet" << endl;
                         return -1;
                     }
-                    cout << "Sending ACK packet " << NEXT_EXPECTED << endl;
+                    cout << "Sending packet " << NEXT_EXPECTED << " FIN" << endl;
                     FINSTART = 1; // Waiting for final ACK from server
                     gettimeofday(&start, NULL);
                     connected = false;
@@ -201,7 +202,7 @@ int main(int argc, char *argv[])
                 
                 // If waiting for final ACK and received ACK with correct sequence number, then done
                 else if (FINSTART == 1) {
-                    cout << "Receiving data packet " << fromHeader.getSEQ() << endl;
+                    cout << "Receiving packet " << fromHeader.getSEQ() << endl;
                     if (fromHeader.getSEQ() == NEXT_EXPECTED) {
                         break;
                     }
@@ -209,7 +210,7 @@ int main(int argc, char *argv[])
                 
                 // Receiving normal data packet
                 else {
-                    cout << "Receiving data packet " << fromHeader.getSEQ() << endl;
+                    cout << "Receiving packet " << fromHeader.getSEQ() << endl;
                     retransmit = false;
                     if (fromHeader.getSEQ() == NEXT_EXPECTED) {
                         NEXT_EXPECTED = (NEXT_EXPECTED + bytes_read - 8) % MAX_SEQ_NUM;
@@ -219,7 +220,7 @@ int main(int argc, char *argv[])
                         retransmit = true;
                     }
                     
-                    TCPHeader toHeader(CURRENT_SEQ, NEXT_EXPECTED, MAX_SEQ_NUM, 4);
+                    TCPHeader toHeader(CURRENT_SEQ, NEXT_EXPECTED, MAX_WIN, 4);
                     encoded_header.clear();
                     encoded_header = toHeader.encode();
                     
@@ -229,10 +230,10 @@ int main(int argc, char *argv[])
                         return -1;
                     }
                     if (retransmit == false) {
-                        cout << "Sending ACK packet " << NEXT_EXPECTED << endl;
+                        cout << "Sending packet " << NEXT_EXPECTED << endl;
                     }
                     else {
-                        cout << "Sending ACK packet " << NEXT_EXPECTED << " Retransmission" << endl;    
+                        cout << "Sending packet " << NEXT_EXPECTED << " Retransmission" << endl;
                     }
                 }
             }
