@@ -28,13 +28,14 @@ string FILENAME;
 struct timeval start, current;
 
 int CWND = 1024;            // Initial congestion window size
-int SSTHRESH = 30720;       // Initial slow start threshold
+int SSTHRESH = 15360;       // Initial slow start threshold
 int LAST_SENT = -1;         // Last byte sent
 int LAST_ACKED = -1;        // Last byte ACKed
 int DATA_INDEX = 0;         // Index of file to read from
 int ACKED_DATA_INDEX = 0;   // Index of file of last acked data
 int state = 0;              // 0 = not connected, 1 = SYN, 2 = regular, 3 = FIN
 FILE* file;                 // File descriptor
+bool sentFIN = false;
 
 const int MSS		  = 1024;
 const int HEADER_LEN  = 8; 	  // Length of header
@@ -51,7 +52,7 @@ void usage_msg()
 
 // Called when timer times out
 void timeout(const int sockfd, const struct sockaddr_storage &cli_addr, socklen_t &cli_addrlen) {
-    // Set slow start threshold to half of CWND
+    // Set slow start threshold to half of CWND (or 1024 if <1024)
     SSTHRESH = CWND/2;
     if (SSTHRESH < 1024) {
         SSTHRESH = 1024;
@@ -74,7 +75,7 @@ void timeout(const int sockfd, const struct sockaddr_storage &cli_addr, socklen_
         
         // Last seq is the seq we just sent
         LAST_SENT = SEQ;
-        cout << "Sending data packet "  << SEQ << " " << CWND << " " << SSTHRESH << " Retransmission" << endl;
+        cout << "Sending packet "  << SEQ << " " << CWND << " " << SSTHRESH << " Retransmission SYN" << endl;
         
     }
     else if (state == 2) { // ACK
@@ -107,7 +108,7 @@ void timeout(const int sockfd, const struct sockaddr_storage &cli_addr, socklen_
         while (sendto(sockfd, &packet[0], packet.size(), 0, (struct sockaddr*) &cli_addr, cli_addrlen) < 0) {
             cerr << "ERROR: Failed to send packet" << endl;
         }
-        cout << "Sending data packet "  << SEQ << " " << CWND << " " << SSTHRESH << " Retransmission" << endl;
+        cout << "Sending packet "  << SEQ << " " << CWND << " " << SSTHRESH << " Retransmission" << endl;
         SEQ = (SEQ + bytes_read) % MAX_SEQ_NUM;
         LAST_SENT = (SEQ - 1 == -1) ? MAX_SEQ_NUM : SEQ-1;
     }
@@ -124,8 +125,14 @@ void timeout(const int sockfd, const struct sockaddr_storage &cli_addr, socklen_
         while (sendto(sockfd, &packet[0], packet.size(), 0, (struct sockaddr*) &cli_addr, cli_addrlen) == -1) {
             cerr << "ERROR: Failed to send packet" << endl;
         }
-        cout << "Sending data packet "  << SEQ << " " << CWND << " " << SSTHRESH << endl;
-        cerr << "(FIN packet)" << endl;
+        cout << "Sending packet "  << SEQ << " " << CWND << " " << SSTHRESH;
+        if (sentFIN) {
+            cout << " Retransmission FIN" << endl;
+        }
+        else {
+            cout << " FIN" << endl;
+        } 
+        sentFIN = true;
         
         // Wait for FIN ACK
         do {
@@ -146,7 +153,7 @@ void timeout(const int sockfd, const struct sockaddr_storage &cli_addr, socklen_
 	    SEQ++;
         ACK++;
 	    
-	    cout << "Receiving ACK packet " << fin_header.getACK() << endl;
+	    cout << "Receiving packet " << fin_header.getACK() << endl;
 	    cerr << "Received FIN/ACK" << endl;
 	    
 	    // Last ACK. Flags = 4 = A
@@ -157,13 +164,13 @@ void timeout(const int sockfd, const struct sockaddr_storage &cli_addr, socklen_
         while (sendto(sockfd, &packet[0], packet.size(), 0, (struct sockaddr*) &cli_addr, cli_addrlen) == -1) {
             cerr << "ERROR: Failed to send packet" << endl;
         }
-        cout << "Sending data packet "  << SEQ << " " << CWND << " " << SSTHRESH << endl;
+        cout << "Sending packet "  << SEQ << " " << CWND << " " << SSTHRESH << endl;
         cerr << "(final ACK after FIN/ACK packet)" << endl;
         
-        cerr << "Closing server after 3 RTO" << endl;
+        cerr << "Closing server after 2 RTO" << endl;
         vector<char> finack_packet(8);
         int num_time = 0;
-        while (num_time < 3) {
+        while (num_time < 2) {
             // Try to recv something from socket
             if (recvfrom(sockfd, &finack_packet[0], 8, 0, (struct sockaddr*) &cli_addr, &cli_addrlen) < 0) {
         		// If errno set, then time out (one RTO)
@@ -187,7 +194,7 @@ void timeout(const int sockfd, const struct sockaddr_storage &cli_addr, socklen_
         }
         
         cerr << "Closing server now" << endl;
-        // Done waiting 3RTO. Exiting.
+        // Done waiting 2RTO. Exiting.
         close(sockfd);
         fclose(file);
         exit(0);
@@ -307,8 +314,8 @@ int main(int argc, char *argv[])
                 }
                 else {
                     // Last seq is the seq we just sent
-                    LAST_SENT = SEQ; // +1??
-                    cout << "Sending data packet "  << SEQ << " " << CWND << " " << SSTHRESH << endl;
+                    LAST_SENT = SEQ;
+                    cout << "Sending packet "  << SEQ << " " << CWND << " " << SSTHRESH << " SYN" << endl;
                     gettimeofday(&start, NULL);
                 }
                 
@@ -339,7 +346,7 @@ int main(int argc, char *argv[])
 		        int WND = min(from_header.getWND()-num_unacked, min(CWND-num_unacked, (MAX_SEQ_NUM+1)/2)-num_unacked);
 		        									// WND = minimum of rcv_wnd, cwnd, and maxseq+1/2
 
-		        cout << "Receiving ACK packet " << from_header.getACK() << endl;
+		        cout << "Receiving packet " << from_header.getACK() << endl;
 
                  // Increase window size Slow start
                 if (CWND < SSTHRESH) {
@@ -364,8 +371,8 @@ int main(int argc, char *argv[])
                         continue;
                     }
                     else {
-                        cout << "Sending data packet "  << SEQ << " " << CWND << " " << SSTHRESH << endl;
-                        cerr << "(FIN packet)" << endl;
+                        sentFIN = true;
+                        cout << "Sending packet "  << SEQ << " " << CWND << " " << SSTHRESH << " FIN" << endl;
                         
                         // Get FINACK. Send final ACK
                         // Wait for FIN ACK
@@ -387,7 +394,7 @@ int main(int argc, char *argv[])
             		    SEQ++;
             		    ACK++;
             		    
-            		    cout << "Receiving ACK packet " << fin_header.getACK() << endl;
+            		    cout << "Receiving packet " << fin_header.getACK() << endl;
             		    cerr << "(FIN/ACK)" << endl;
             		    
             		    // Last ACK. Flags = 4 = A
@@ -400,13 +407,13 @@ int main(int argc, char *argv[])
                             continue;
                         }
                         else {
-                            cout << "Sending data packet "  << SEQ << " " << CWND << " " << SSTHRESH << endl;
+                            cout << "Sending packet "  << SEQ << " " << CWND << " " << SSTHRESH << endl;
                             cerr << "(Final ACK after FIN/ACK)" << endl;
                             
-                            cerr << "Closing server after 3 RTO" << endl;
+                            cerr << "Closing server after 2 RTO" << endl;
                             vector<char> finack_packet(8);
                             int num_time = 0;
-                            while (num_time < 3) {
+                            while (num_time < 2) {
                                 if (recvfrom(sockfd, &finack_packet[0], 8, 0, (struct sockaddr*) &cli_addr, &cli_addrlen) < 0) {
                             		// If errno set, then time out
                             		if ((errno == EAGAIN) || (errno == EWOULDBLOCK)) {
@@ -429,7 +436,7 @@ int main(int argc, char *argv[])
                             }
                             
                             cerr << "Closing server now" << endl;
-                            // Done waiting 3RTO. Exiting.
+                            // Done waiting 2RTO. Exiting.
                             close(sockfd);
                             fclose(file);
                             exit(0);
@@ -461,7 +468,7 @@ int main(int argc, char *argv[])
                             continue;
                         }
                         else {
-                            cout << "Sending data packet "  << SEQ << " " << CWND << " " << SSTHRESH << endl;
+                            cout << "Sending packet "  << SEQ << " " << CWND << " " << SSTHRESH << endl;
                             SEQ = (SEQ + bytes_read) % MAX_SEQ_NUM;
                             LAST_SENT = (SEQ - 1 == -1) ? MAX_SEQ_NUM : SEQ-1;
                         }

@@ -124,14 +124,14 @@ int main(int argc, char *argv[])
                     cerr <<"sendto failed" << endl;
                     return -1;
                 }
-                cout << "Sending packet " << NEXT_EXPECTED << " Retransmission" << endl;
+                cout << "Sending packet " << NEXT_EXPECTED << " Retransmission FIN" << endl;
             }
             else {
                 if (sendto(sockfd, &encoded_header[0], encoded_header.size(), 0, (struct sockaddr *)&servaddr, sizeof(servaddr)) < 0) {
                     cerr <<"sendto failed" << endl;
                     return -1;
                 }
-                cout << "Sending packet 0 Retransmission" << endl;
+                cout << "Sending packet 0 Retransmission SYN" << endl;
             }
             gettimeofday(&start, NULL);
         }

@@ -111,7 +111,7 @@ Kevin Huynh, 704-283-105}
     sending this ACK, the server then waits 3 RTO (1.5 seconds); if the server
     receives any packets during this time, it will check the flags to see if it
     is a FIN/ACK. If the packet is a FIN/ACK, the server will retransmit the
-    final ACK. If the server does not receive anything for 3 RTO, then the
+    final ACK. If the server does not receive anything for 2 RTO, then the
     server will close the socket and terminate.
 
 \section{Problems Encountered}
